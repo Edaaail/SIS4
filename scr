@@ -1,0 +1,29 @@
+sudo mkdir -p /var/backups
+sudo chown root:root /var/backups
+sudo chmod 755 /var/backups
+
+sudo tee /usr/local/bin/backup_db.sh > /dev/null <<'SH'
+#!/bin/bash
+OUTDIR="/var/backups"
+TIMESTAMP=$(date +%F_%H-%M-%S)
+sudo -u postgres pg_dump -h localhost -p 5432 -U postgres football > "${OUTDIR}/football_${TIMESTAMP}.sql"
+find "${OUTDIR}" -name "football_*.sql" -type f -mtime +30 -delete
+SH
+
+sudo chmod +x /usr/local/bin/backup_db.sh
+
+sudo tee /usr/local/bin/cleanup_logs.sh > /dev/null <<'SH'
+#!/bin/bash
+LOGPATH="/var/log"
+find "$LOGPATH" -type f -name "*.log" -mtime +7 -exec sh -c '> "{}"' \;
+find "$LOGPATH" -type f -name "*.gz" -mtime +30 -delete
+SH
+
+sudo chmod +x /usr/local/bin/cleanup_logs.sh
+
+sudo bash -c 'cat <<EOF >> /var/spool/cron/crontabs/root
+0 2 * * * /usr/local/bin/backup_db.sh
+0 3 * * 0 /usr/local/bin/cleanup_logs.sh
+EOF'
+
+sudo systemctl restart cron
